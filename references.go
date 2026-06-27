@@ -180,7 +180,9 @@ func injectNamespaces(raw []byte, inherited, own map[string]string) []byte {
 		if p == "" {
 			ins.WriteString(`xmlns="`)
 		} else {
-			ins.WriteString("xmlns:" + p + `="`)
+			ins.WriteString("xmlns:")
+			ins.WriteString(p)
+			ins.WriteString(`="`)
 		}
 		xml.EscapeText(&ins, []byte(inherited[p]))
 		ins.WriteByte('"')
