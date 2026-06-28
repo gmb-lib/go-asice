@@ -8,12 +8,16 @@
 // The checks here are over file digests and XAdES references only (hashing and
 // XML reading), which keeps the dependency surface tiny.
 //
-// The four entry points mirror the service design:
+// The core entry points mirror the service design:
 //
 //   - BuildContainer assembles a new .asice from documents + one or more XAdES
 //     signature files.
 //   - AddSignature adds a parallel (co-) signature to an existing .asice,
 //     deriving the next signature file index itself.
+//   - CoSign merges the signature(s) from a fileless hash-only result into an
+//     existing container as parallel co-signature(s).
+//   - DataObjects returns the container's data-object bytes, used to re-digest
+//     the inner files a parallel co-signature must reference.
 //   - Inspect enumerates the manifest, signatures, and data objects in a
 //     container.
 //   - CheckReferences verifies that signature files reference exactly the

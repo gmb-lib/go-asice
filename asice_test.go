@@ -611,6 +611,146 @@ func TestExtractAndMerge_TargetMismatch(t *testing.T) {
 	}
 }
 
+// --- DataObjects -------------------------------------------------------------
+
+func TestDataObjects(t *testing.T) {
+	docs := sampleDocs()
+	container, err := BuildContainer(docs, []File{{Name: "x.xml", Data: makeXAdES(t, docs, xadesOpts{})}}, nil)
+	if err != nil {
+		t.Fatalf("BuildContainer: %v", err)
+	}
+
+	objs, err := DataObjects(container)
+	if err != nil {
+		t.Fatalf("DataObjects: %v", err)
+	}
+	if len(objs) != 2 {
+		t.Fatalf("data objects = %d, want 2", len(objs))
+	}
+	byName := make(map[string][]byte, len(objs))
+	for _, o := range objs {
+		byName[o.Name] = o.Data
+	}
+	for _, d := range docs {
+		got, ok := byName[d.Name]
+		if !ok {
+			t.Fatalf("data object %q missing", d.Name)
+		}
+		if !bytes.Equal(got, d.Data) {
+			t.Fatalf("data object %q bytes differ", d.Name)
+		}
+	}
+}
+
+func TestDataObjects_Errors(t *testing.T) {
+	docs := sampleDocs()
+	full, err := BuildContainer(docs, []File{{Name: "x.xml", Data: makeXAdES(t, docs, xadesOpts{})}}, nil)
+	if err != nil {
+		t.Fatalf("BuildContainer: %v", err)
+	}
+
+	t.Run("fileless has no data objects", func(t *testing.T) {
+		if _, err := DataObjects(makeFileless(t, full)); !errors.Is(err, ErrNoDocuments) {
+			t.Fatalf("want ErrNoDocuments, got %v", err)
+		}
+	})
+
+	t.Run("invalid container", func(t *testing.T) {
+		if _, err := DataObjects([]byte("not a zip")); !errors.Is(err, ErrInvalidContainer) {
+			t.Fatalf("want ErrInvalidContainer, got %v", err)
+		}
+	})
+}
+
+// --- CoSign ------------------------------------------------------------------
+
+func TestCoSign(t *testing.T) {
+	docs := sampleDocs()
+
+	// First party: a complete container with one signature.
+	target, err := BuildContainer(docs, []File{{Name: "first.xml", Data: makeXAdES(t, docs, xadesOpts{id: "FIRST"})}}, nil)
+	if err != nil {
+		t.Fatalf("BuildContainer target: %v", err)
+	}
+	origSig0, _ := readZipEntry(t, target, "META-INF/signatures0.xml")
+	origDoc1, _ := readZipEntry(t, target, "doc1.txt")
+
+	// Second party signs the same data objects; the signing service returns a
+	// fileless container holding only the new signature.
+	secondFull, err := BuildContainer(docs, []File{{Name: "second.xml", Data: makeXAdES(t, docs, xadesOpts{id: "SECOND"})}}, nil)
+	if err != nil {
+		t.Fatalf("BuildContainer second: %v", err)
+	}
+	fileless := makeFileless(t, secondFull)
+
+	merged, err := CoSign(target, fileless)
+	if err != nil {
+		t.Fatalf("CoSign: %v", err)
+	}
+
+	// Two parallel signatures now, both over the same data objects.
+	_, sigs, objs, err := Inspect(merged)
+	if err != nil {
+		t.Fatalf("Inspect merged: %v", err)
+	}
+	if len(sigs) != 2 {
+		t.Fatalf("merged signatures = %d, want 2", len(sigs))
+	}
+	if len(objs) != 2 {
+		t.Fatalf("merged data objects = %d, want 2", len(objs))
+	}
+	readZipEntry(t, merged, "META-INF/signatures1.xml") // new sig at the next free index
+
+	// The first signature and the data objects are untouched, so the prior
+	// signature stays valid.
+	newSig0, _ := readZipEntry(t, merged, "META-INF/signatures0.xml")
+	if !bytes.Equal(origSig0, newSig0) {
+		t.Fatalf("signatures0.xml changed after CoSign")
+	}
+	newDoc1, _ := readZipEntry(t, merged, "doc1.txt")
+	if !bytes.Equal(origDoc1, newDoc1) {
+		t.Fatalf("data object changed after CoSign")
+	}
+}
+
+func TestCoSign_Errors(t *testing.T) {
+	docs := sampleDocs()
+	target, err := BuildContainer(docs, []File{{Name: "sig.xml", Data: makeXAdES(t, docs, xadesOpts{})}}, nil)
+	if err != nil {
+		t.Fatalf("BuildContainer: %v", err)
+	}
+
+	t.Run("co-signature targets different data objects", func(t *testing.T) {
+		otherDocs := []File{
+			{Name: "doc1.txt", Data: []byte("hello world")},
+			{Name: "extra.txt", Data: []byte("extra file content")},
+		}
+		otherFull, err := BuildContainer(otherDocs, []File{{Name: "s.xml", Data: makeXAdES(t, otherDocs, xadesOpts{})}}, nil)
+		if err != nil {
+			t.Fatalf("BuildContainer otherDocs: %v", err)
+		}
+		if _, err := CoSign(target, makeFileless(t, otherFull)); !errors.Is(err, ErrSignatureTargetMismatch) {
+			t.Fatalf("want ErrSignatureTargetMismatch, got %v", err)
+		}
+	})
+
+	t.Run("fileless carries no signatures", func(t *testing.T) {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		writeMimetype(zw)
+		zw.Close()
+		if _, err := CoSign(target, buf.Bytes()); !errors.Is(err, ErrNoSignatures) {
+			t.Fatalf("want ErrNoSignatures, got %v", err)
+		}
+	})
+
+	t.Run("invalid fileless", func(t *testing.T) {
+		if _, err := CoSign(target, []byte("not a zip")); !errors.Is(err, ErrInvalidContainer) {
+			t.Fatalf("want ErrInvalidContainer, got %v", err)
+		}
+	})
+}
+
 func TestAddDocuments_RoundTrip(t *testing.T) {
 	docs := sampleDocs()
 	sig := File{Name: "xades.xml", Data: makeXAdES(t, docs, xadesOpts{})}
