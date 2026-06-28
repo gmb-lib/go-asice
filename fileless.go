@@ -33,6 +33,31 @@ func ExtractSignatures(container []byte) ([]File, error) {
 	return sigs, nil
 }
 
+// CoSign adds the signature(s) carried by a fileless container — the hash-only
+// result a signing service returns when it never held the file bytes — as
+// parallel co-signature(s) on an existing, complete container, returning the
+// updated container. It is the one-call form of ExtractSignatures followed by
+// AddSignature, so the caller never has to crack the fileless result itself.
+//
+// The co-signature(s) must reference exactly the data objects the original
+// container already holds (same filenames and digests); otherwise an error
+// wrapping ErrSignatureTargetMismatch is returned. The original's data objects
+// and prior signatures are copied byte-for-byte, so previously valid signatures
+// remain valid, and each added signature file is given the next free index.
+func CoSign(original, fileless []byte) ([]byte, error) {
+	sigs, err := ExtractSignatures(fileless)
+	if err != nil {
+		return nil, err
+	}
+	updated := original
+	for _, s := range sigs {
+		if updated, err = AddSignature(updated, s.Data); err != nil {
+			return nil, err
+		}
+	}
+	return updated, nil
+}
+
 // AddDocuments inserts data object(s) into a container that references them but
 // is missing their bytes (e.g. a hash-signed, fileless container), producing a
 // complete .asice. It verifies that each supplied document matches what the

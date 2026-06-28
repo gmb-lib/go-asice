@@ -131,6 +131,30 @@ func AddSignature(container, newSignature []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// DataObjects returns the container-root data objects (the signed files) with
+// their bytes, in container order. The mimetype, anything under META-INF/, and
+// directory entries are excluded. Use it to re-compute the digests a parallel
+// co-signature must reference: a co-signature signs the existing container's
+// inner files, not the container blob as a whole. It performs no signature
+// verification.
+//
+// It returns ErrInvalidContainer if the bytes are not a readable container, or
+// ErrNoDocuments if the container holds no data objects (e.g. a fileless one).
+func DataObjects(container []byte) ([]File, error) {
+	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidContainer, err)
+	}
+	objects, _, err := readEntries(zr)
+	if err != nil {
+		return nil, err
+	}
+	if len(objects) == 0 {
+		return nil, ErrNoDocuments
+	}
+	return objects, nil
+}
+
 // verifySignatureTargets checks that a new signature's references match the
 // container's data objects exactly, returning errors wrapping
 // ErrSignatureTargetMismatch.
