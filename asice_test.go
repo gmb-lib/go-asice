@@ -91,7 +91,7 @@ func readZipEntry(t *testing.T, container []byte, name string) ([]byte, *zip.Fil
 			if err != nil {
 				t.Fatalf("open %q: %v", name, err)
 			}
-			defer rc.Close()
+			defer func() { _ = rc.Close() }()
 			data, err := io.ReadAll(rc)
 			if err != nil {
 				t.Fatalf("read %q: %v", name, err)
@@ -501,8 +501,8 @@ func TestAddDocuments_Errors(t *testing.T) {
 	t.Run("no signatures", func(t *testing.T) {
 		var buf bytes.Buffer
 		zw := zip.NewWriter(&buf)
-		writeMimetype(zw)
-		zw.Close()
+		_ = writeMimetype(zw)
+		_ = zw.Close()
 		_, err := AddDocuments(buf.Bytes(), docs)
 		if !errors.Is(err, ErrNoSignatures) {
 			t.Fatalf("want ErrNoSignatures, got %v", err)
@@ -534,8 +534,8 @@ func TestExtractSignatures_Basic(t *testing.T) {
 func TestExtractSignatures_NoSignatures(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	writeMimetype(zw)
-	zw.Close()
+	_ = writeMimetype(zw)
+	_ = zw.Close()
 	_, err := ExtractSignatures(buf.Bytes())
 	if !errors.Is(err, ErrNoSignatures) {
 		t.Fatalf("want ErrNoSignatures, got %v", err)
@@ -737,8 +737,8 @@ func TestCoSign_Errors(t *testing.T) {
 	t.Run("fileless carries no signatures", func(t *testing.T) {
 		var buf bytes.Buffer
 		zw := zip.NewWriter(&buf)
-		writeMimetype(zw)
-		zw.Close()
+		_ = writeMimetype(zw)
+		_ = zw.Close()
 		if _, err := CoSign(target, buf.Bytes()); !errors.Is(err, ErrNoSignatures) {
 			t.Fatalf("want ErrNoSignatures, got %v", err)
 		}

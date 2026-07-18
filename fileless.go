@@ -12,7 +12,7 @@ import (
 func ExtractSignatures(container []byte) ([]File, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidContainer, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
 	}
 
 	var sigs []File
@@ -65,7 +65,7 @@ func CoSign(original, fileless []byte) ([]byte, error) {
 func AddDocuments(container []byte, docs []File) ([]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidContainer, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
 	}
 
 	// Collect all data-object references from every signature in the container.

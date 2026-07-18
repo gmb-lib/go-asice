@@ -26,7 +26,7 @@ type DataObject struct {
 func Inspect(container []byte) (Manifest, []SignatureInfo, []DataObject, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
-		return Manifest{}, nil, nil, fmt.Errorf("%w: %v", ErrInvalidContainer, err)
+		return Manifest{}, nil, nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
 	}
 
 	var (

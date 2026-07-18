@@ -3,6 +3,7 @@ package asice
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -67,11 +68,11 @@ func parseSignatures(data []byte) ([]parsedSignature, error) {
 	for {
 		tokStart := startOfNext
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrMalformedXAdES, err)
+			return nil, fmt.Errorf("%w: %w", ErrMalformedXAdES, err)
 		}
 		tokEnd := dec.InputOffset()
 		startOfNext = tokEnd
@@ -184,7 +185,7 @@ func injectNamespaces(raw []byte, inherited, own map[string]string) []byte {
 			ins.WriteString(p)
 			ins.WriteString(`="`)
 		}
-		xml.EscapeText(&ins, []byte(inherited[p]))
+		_ = xml.EscapeText(&ins, []byte(inherited[p]))
 		ins.WriteByte('"')
 	}
 
@@ -225,7 +226,7 @@ type xmlSignature struct {
 func extractReferences(rawSig []byte) ([]Reference, error) {
 	var sig xmlSignature
 	if err := xml.Unmarshal(rawSig, &sig); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformedXAdES, err)
+		return nil, fmt.Errorf("%w: %w", ErrMalformedXAdES, err)
 	}
 	var refs []Reference
 	for _, r := range sig.References {

@@ -1,7 +1,7 @@
 package asice
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // SHA-1 is a valid XAdES/XML-DSig DigestMethod, used only when a signature specifies it
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
