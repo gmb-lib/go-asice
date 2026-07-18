@@ -83,7 +83,7 @@ func BuildContainer(docs, signatures []File, opts *BuildOptions) ([]byte, error)
 func AddSignature(container, newSignature []byte) ([]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidContainer, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
 	}
 
 	objects, names, err := readEntries(zr)
@@ -143,7 +143,7 @@ func AddSignature(container, newSignature []byte) ([]byte, error) {
 func DataObjects(container []byte) ([]File, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidContainer, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
 	}
 	objects, _, err := readEntries(zr)
 	if err != nil {
@@ -232,12 +232,12 @@ func readZipFile(f *zip.File) ([]byte, error) {
 	}
 	rc, err := f.Open()
 	if err != nil {
-		return nil, fmt.Errorf("%w: open %q: %v", ErrInvalidContainer, f.Name, err)
+		return nil, fmt.Errorf("%w: open %q: %w", ErrInvalidContainer, f.Name, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	data, err := io.ReadAll(rc)
 	if err != nil {
-		return nil, fmt.Errorf("%w: read %q: %v", ErrInvalidContainer, f.Name, err)
+		return nil, fmt.Errorf("%w: read %q: %w", ErrInvalidContainer, f.Name, err)
 	}
 	return data, nil
 }

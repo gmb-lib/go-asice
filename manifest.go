@@ -72,7 +72,7 @@ type xmlManifest struct {
 func parseManifest(data []byte) (Manifest, error) {
 	var xm xmlManifest
 	if err := xml.Unmarshal(data, &xm); err != nil {
-		return Manifest{}, fmt.Errorf("%w: manifest.xml: %v", ErrInvalidContainer, err)
+		return Manifest{}, fmt.Errorf("%w: manifest.xml: %w", ErrInvalidContainer, err)
 	}
 	var m Manifest
 	for _, fe := range xm.Entries {
