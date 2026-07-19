@@ -80,13 +80,20 @@ func BuildContainer(docs, signatures []File, opts *BuildOptions) ([]byte, error)
 // holds (same filenames and digests), otherwise an error wrapping
 // ErrSignatureTargetMismatch is returned. The next signatures*.xml index is
 // derived internally — the caller never supplies it.
-func AddSignature(container, newSignature []byte) ([]byte, error) {
+//
+// The container is read under the decompression Limits (DefaultLimits unless
+// overridden via opts).
+func AddSignature(container, newSignature []byte, opts ...Option) ([]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
 	}
+	b := newBudget(effectiveLimits(opts))
+	if err := b.checkArchive(zr); err != nil {
+		return nil, err
+	}
 
-	objects, names, err := readEntries(zr)
+	objects, names, err := readEntries(zr, b)
 	if err != nil {
 		return nil, err
 	}
@@ -140,12 +147,19 @@ func AddSignature(container, newSignature []byte) ([]byte, error) {
 //
 // It returns ErrInvalidContainer if the bytes are not a readable container, or
 // ErrNoDocuments if the container holds no data objects (e.g. a fileless one).
-func DataObjects(container []byte) ([]File, error) {
+//
+// The container is read under the decompression Limits (DefaultLimits unless
+// overridden via opts).
+func DataObjects(container []byte, opts ...Option) ([]File, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
 	}
-	objects, _, err := readEntries(zr)
+	b := newBudget(effectiveLimits(opts))
+	if err := b.checkArchive(zr); err != nil {
+		return nil, err
+	}
+	objects, _, err := readEntries(zr, b)
 	if err != nil {
 		return nil, err
 	}
@@ -198,13 +212,13 @@ func toSet(objects []File) map[string]bool {
 
 // readEntries reads a container's root-level data objects and returns their
 // contents plus the full list of entry names (used for signature indexing).
-func readEntries(zr *zip.Reader) (objects []File, names []string, err error) {
+func readEntries(zr *zip.Reader, b *budget) (objects []File, names []string, err error) {
 	for _, f := range zr.File {
 		names = append(names, f.Name)
 		if !isDataObject(f.Name) {
 			continue
 		}
-		data, rerr := readZipFile(f)
+		data, rerr := b.readEntry(f)
 		if rerr != nil {
 			return nil, nil, rerr
 		}
@@ -223,23 +237,6 @@ func isDataObject(name string) bool {
 		return false
 	}
 	return true
-}
-
-// readZipFile reads a single entry, rejecting unsafe paths.
-func readZipFile(f *zip.File) ([]byte, error) {
-	if !safePath(f.Name) {
-		return nil, fmt.Errorf("%w: unsafe entry path %q", ErrInvalidContainer, f.Name)
-	}
-	rc, err := f.Open()
-	if err != nil {
-		return nil, fmt.Errorf("%w: open %q: %w", ErrInvalidContainer, f.Name, err)
-	}
-	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
-	if err != nil {
-		return nil, fmt.Errorf("%w: read %q: %w", ErrInvalidContainer, f.Name, err)
-	}
-	return data, nil
 }
 
 // safePath rejects absolute paths and any path containing a ".." segment,

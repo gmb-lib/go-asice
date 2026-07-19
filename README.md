@@ -27,6 +27,26 @@ the dependency surface to the standard library.
 | `DataObjects(container) ([]File, error)` | Return the container-root data objects (signed files) with their bytes; use to recompute the digests a co-signature must reference. |
 | `Inspect(container) (Manifest, []SignatureInfo, []DataObject, error)` | Enumerate manifest, signatures, and data objects. |
 | `CheckReferences(docs, signatures) error` | Verify signatures reference exactly the supplied documents (count + filename + SHA-2 digest). |
+| `Sniff(data) error` | Strict outer-shape check for untrusted bytes: ZIP magic at offset 0 (rejects prefixed/polyglot files) + a `mimetype` first entry, stored uncompressed, with the exact ASiC-E media type. Shape only — no signature or crypto checks. |
+| `IsZip(data) bool` | ZIP local-file-header magic at offset 0 (byte check only). Combine with `Sniff` to tell "plain ZIP" apart from "ASiC-E". |
+
+### Reading untrusted containers — decompression limits
+
+Every container-reading function (`Inspect`, `DataObjects`, `ExtractSignatures`,
+`AddSignature`, `CoSign`, `AddDocuments`, `Sniff`) decompresses entries under
+**limits**, so a crafted archive (a "zip bomb") cannot exhaust memory: a
+per-entry cap, a total cap across the operation, and an entry-count cap.
+Enforcement wraps the readers themselves — the ZIP headers' declared sizes are
+never trusted. Defaults (`DefaultLimits`: 64 MiB per entry, 128 MiB total,
+512 entries) suit real containers; override per call:
+
+```go
+_, _, _, err := asice.Inspect(data, asice.WithLimits(asice.Limits{MaxEntryBytes: 8 << 20}))
+// errors.Is(err, asice.ErrTooLarge) / errors.Is(err, asice.ErrTooManyEntries)
+```
+
+A non-positive field in `WithLimits` keeps its default, so raising one limit
+never silently disables the others.
 
 ### Example
 
@@ -85,7 +105,7 @@ Mismatches return sentinel errors (use `errors.Is`):
 `ErrFileCountMismatch`, `ErrFilenameMismatch`, `ErrDigestMismatch`,
 `ErrSignatureTargetMismatch` (parallel signing), `ErrMalformedXAdES`,
 `ErrUnsupportedDigest`, `ErrInvalidContainer`, `ErrNoDocuments`,
-`ErrNoSignatures`.
+`ErrNoSignatures`, `ErrTooLarge` / `ErrTooManyEntries` (decompression limits).
 
 ## Scope / non-goals
 
