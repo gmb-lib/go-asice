@@ -23,10 +23,18 @@ type DataObject struct {
 // Inspect enumerates the contents of an ASiC-E container: its parsed manifest,
 // the signatures it holds, and its data objects. It does not validate the
 // container cryptographically.
-func Inspect(container []byte) (Manifest, []SignatureInfo, []DataObject, error) {
+//
+// The manifest and signature entries are decompressed under the Limits
+// (DefaultLimits unless overridden via opts); data-object bytes are not read —
+// only their headers are enumerated.
+func Inspect(container []byte, opts ...Option) (Manifest, []SignatureInfo, []DataObject, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
 		return Manifest{}, nil, nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
+	}
+	b := newBudget(effectiveLimits(opts))
+	if err := b.checkArchive(zr); err != nil {
+		return Manifest{}, nil, nil, err
 	}
 
 	var (
@@ -38,7 +46,7 @@ func Inspect(container []byte) (Manifest, []SignatureInfo, []DataObject, error) 
 	for _, f := range zr.File {
 		switch {
 		case f.Name == manifestPath:
-			data, err := readZipFile(f)
+			data, err := b.readEntry(f)
 			if err != nil {
 				return Manifest{}, nil, nil, err
 			}
@@ -47,7 +55,7 @@ func Inspect(container []byte) (Manifest, []SignatureInfo, []DataObject, error) 
 			}
 
 		case isSignatureFile(f.Name):
-			data, err := readZipFile(f)
+			data, err := b.readEntry(f)
 			if err != nil {
 				return Manifest{}, nil, nil, err
 			}

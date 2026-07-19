@@ -9,10 +9,17 @@ import (
 // ExtractSignatures returns the signatures*.xml entries from a container,
 // including a fileless one. The returned File.Data is suitable to pass to
 // AddSignature.
-func ExtractSignatures(container []byte) ([]File, error) {
+//
+// The container is read under the decompression Limits (DefaultLimits unless
+// overridden via opts).
+func ExtractSignatures(container []byte, opts ...Option) ([]File, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
+	}
+	b := newBudget(effectiveLimits(opts))
+	if err := b.checkArchive(zr); err != nil {
+		return nil, err
 	}
 
 	var sigs []File
@@ -20,7 +27,7 @@ func ExtractSignatures(container []byte) ([]File, error) {
 		if !isSignatureFile(f.Name) {
 			continue
 		}
-		data, err := readZipFile(f)
+		data, err := b.readEntry(f)
 		if err != nil {
 			return nil, err
 		}
@@ -44,14 +51,14 @@ func ExtractSignatures(container []byte) ([]File, error) {
 // wrapping ErrSignatureTargetMismatch is returned. The original's data objects
 // and prior signatures are copied byte-for-byte, so previously valid signatures
 // remain valid, and each added signature file is given the next free index.
-func CoSign(original, fileless []byte) ([]byte, error) {
-	sigs, err := ExtractSignatures(fileless)
+func CoSign(original, fileless []byte, opts ...Option) ([]byte, error) {
+	sigs, err := ExtractSignatures(fileless, opts...)
 	if err != nil {
 		return nil, err
 	}
 	updated := original
 	for _, s := range sigs {
-		if updated, err = AddSignature(updated, s.Data); err != nil {
+		if updated, err = AddSignature(updated, s.Data, opts...); err != nil {
 			return nil, err
 		}
 	}
@@ -62,10 +69,17 @@ func CoSign(original, fileless []byte) ([]byte, error) {
 // is missing their bytes (e.g. a hash-signed, fileless container), producing a
 // complete .asice. It verifies that each supplied document matches what the
 // container's signatures reference before inserting.
-func AddDocuments(container []byte, docs []File) ([]byte, error) {
+//
+// The container is read under the decompression Limits (DefaultLimits unless
+// overridden via opts).
+func AddDocuments(container []byte, docs []File, opts ...Option) ([]byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(container), int64(len(container)))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidContainer, err)
+	}
+	b := newBudget(effectiveLimits(opts))
+	if err := b.checkArchive(zr); err != nil {
+		return nil, err
 	}
 
 	// Collect all data-object references from every signature in the container.
@@ -76,7 +90,7 @@ func AddDocuments(container []byte, docs []File) ([]byte, error) {
 			continue
 		}
 		hasSignatures = true
-		data, err := readZipFile(f)
+		data, err := b.readEntry(f)
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +157,7 @@ func AddDocuments(container []byte, docs []File) ([]byte, error) {
 		if f.Name != manifestPath {
 			continue
 		}
-		data, err := readZipFile(f)
+		data, err := b.readEntry(f)
 		if err != nil {
 			return nil, err
 		}
