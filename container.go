@@ -71,6 +71,62 @@ func BuildContainer(docs, signatures []File, opts *BuildOptions) ([]byte, error)
 	return buf.Bytes(), nil
 }
 
+// BuildUnsigned assembles a signature-less ASiC-E container from one or more
+// original documents, returning the raw .asice bytes. The result is a valid
+// container holding only data objects — an uncompressed "mimetype" entry
+// first, the documents in the container root in the given order, then
+// META-INF/manifest.xml with one file-entry per document. No
+// META-INF/signatures*.xml is written; signatures are added later via
+// AddSignature (or CoSign), which treats the first signature exactly like any
+// parallel one.
+//
+// Use it to hold a multi-document set in its final container form before
+// anyone has signed: the data-object order is fixed here and preserved by
+// every later signature merge.
+//
+// Document names must be bare container-root paths: non-empty, safe (no
+// absolute paths or ".." segments), not "mimetype" or under "META-INF/", and
+// unique within the set — violations return an error wrapping
+// ErrBadDocumentName.
+func BuildUnsigned(docs []File) ([]byte, error) {
+	if len(docs) == 0 {
+		return nil, ErrNoDocuments
+	}
+	seen := make(map[string]bool, len(docs))
+	for _, d := range docs {
+		if !safePath(d.Name) || !isDataObject(d.Name) {
+			return nil, fmt.Errorf("%w: %q", ErrBadDocumentName, d.Name)
+		}
+		if seen[d.Name] {
+			return nil, fmt.Errorf("%w: duplicate %q", ErrBadDocumentName, d.Name)
+		}
+		seen[d.Name] = true
+	}
+
+	manifest, err := buildManifest(docs).render()
+	if err != nil {
+		return nil, fmt.Errorf("render manifest: %w", err)
+	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	if err := writeMimetype(zw); err != nil {
+		return nil, err
+	}
+	for _, d := range docs {
+		if err := writeStoredFile(zw, d.Name, d.Data, zip.Deflate); err != nil {
+			return nil, err
+		}
+	}
+	if err := writeStoredFile(zw, manifestPath, manifest, zip.Deflate); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, fmt.Errorf("finalise container: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
 // AddSignature adds a parallel (co-) signature to an existing ASiC-E container
 // and returns a new container. The existing entries — data objects and prior
 // signatures — are copied byte-for-byte so that previously valid signatures are

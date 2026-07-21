@@ -94,4 +94,7 @@ var (
 	// ErrNoDocuments: an operation requires at least one document but none were
 	// supplied.
 	ErrNoDocuments = errors.New("asice: no documents supplied")
+	// ErrBadDocumentName: a supplied document name is empty, unsafe as a ZIP
+	// path, reserved (mimetype or META-INF/*), or duplicated in the set.
+	ErrBadDocumentName = errors.New("asice: bad document name")
 )
