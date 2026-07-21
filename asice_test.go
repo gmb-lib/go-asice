@@ -300,6 +300,146 @@ func mustInspect(t *testing.T, container []byte) (Manifest, []DataObject, []Sign
 
 // --- AddSignature ------------------------------------------------------------
 
+// --- BuildUnsigned -------------------------------------------------------------
+
+func TestBuildUnsigned_Layout(t *testing.T) {
+	docs := sampleDocs()
+	container, err := BuildUnsigned(docs)
+	if err != nil {
+		t.Fatalf("BuildUnsigned: %v", err)
+	}
+
+	// Same ASiC-E layout rules as a signed build: mimetype first, stored, no
+	// data descriptor.
+	if got := string(container[30:38]); got != "mimetype" {
+		t.Fatalf("first entry name = %q, want mimetype", got)
+	}
+	method := uint16(container[8]) | uint16(container[9])<<8
+	if method != zip.Store {
+		t.Fatalf("mimetype must be stored (method=%d)", method)
+	}
+	if err := Sniff(container); err != nil {
+		t.Fatalf("Sniff rejects an unsigned container: %v", err)
+	}
+
+	// Exactly mimetype + docs + manifest — no signature entries.
+	zr, _ := zip.NewReader(bytes.NewReader(container), int64(len(container)))
+	want := []string{mimetypePath, "doc1.txt", "report.pdf", manifestPath}
+	if len(zr.File) != len(want) {
+		t.Fatalf("entry count = %d, want %d", len(zr.File), len(want))
+	}
+	for i, name := range want {
+		if zr.File[i].Name != name {
+			t.Fatalf("entry[%d] = %q, want %q", i, zr.File[i].Name, name)
+		}
+	}
+
+	// Documents byte-identical; manifest lists root + both docs.
+	got, _ := readZipEntry(t, container, "doc1.txt")
+	if !bytes.Equal(got, docs[0].Data) {
+		t.Fatalf("doc1.txt content altered")
+	}
+	manifest, sigs, objs, err := Inspect(container)
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	if len(manifest.Entries) != 3 {
+		t.Fatalf("manifest entries = %d, want 3", len(manifest.Entries))
+	}
+	if len(sigs) != 0 {
+		t.Fatalf("signatures = %d, want 0", len(sigs))
+	}
+	if len(objs) != 2 {
+		t.Fatalf("data objects = %d, want 2", len(objs))
+	}
+
+	// DataObjects preserves the supplied order.
+	files, err := DataObjects(container)
+	if err != nil {
+		t.Fatalf("DataObjects: %v", err)
+	}
+	if len(files) != 2 || files[0].Name != "doc1.txt" || files[1].Name != "report.pdf" {
+		t.Fatalf("data-object order wrong: %+v", files)
+	}
+}
+
+func TestBuildUnsigned_Errors(t *testing.T) {
+	if _, err := BuildUnsigned(nil); !errors.Is(err, ErrNoDocuments) {
+		t.Fatalf("want ErrNoDocuments, got %v", err)
+	}
+	bad := [][]File{
+		{{Name: "", Data: []byte("x")}},
+		{{Name: "mimetype", Data: []byte("x")}},
+		{{Name: "META-INF/evil.xml", Data: []byte("x")}},
+		{{Name: "../escape.txt", Data: []byte("x")}},
+		{{Name: "/abs.txt", Data: []byte("x")}},
+		{{Name: "dup.txt", Data: []byte("a")}, {Name: "dup.txt", Data: []byte("b")}},
+	}
+	for _, docs := range bad {
+		if _, err := BuildUnsigned(docs); !errors.Is(err, ErrBadDocumentName) {
+			t.Fatalf("docs %v: want ErrBadDocumentName, got %v", docs, err)
+		}
+	}
+}
+
+// The first signature lands on an unsigned container exactly like a parallel
+// co-signature: via AddSignature directly, and via the CoSign fileless-merge
+// path. This is the primitive that lets a multi-document set be held in its
+// final container form before anyone signs.
+func TestBuildUnsigned_FirstSignatureMerge(t *testing.T) {
+	docs := sampleDocs()
+	unsigned, err := BuildUnsigned(docs)
+	if err != nil {
+		t.Fatalf("BuildUnsigned: %v", err)
+	}
+
+	t.Run("AddSignature onto zero signatures", func(t *testing.T) {
+		signed, err := AddSignature(unsigned, makeXAdES(t, docs, xadesOpts{id: "A"}))
+		if err != nil {
+			t.Fatalf("AddSignature onto unsigned: %v", err)
+		}
+		readZipEntry(t, signed, "META-INF/signatures0.xml")
+		_, sigs, objs, err := Inspect(signed)
+		if err != nil {
+			t.Fatalf("Inspect: %v", err)
+		}
+		if len(sigs) != 1 || len(objs) != 2 {
+			t.Fatalf("after first signature: sigs=%d objs=%d, want 1/2", len(sigs), len(objs))
+		}
+	})
+
+	t.Run("CoSign fileless merge onto zero signatures", func(t *testing.T) {
+		full, err := BuildContainer(docs, []File{{Name: "s.xml", Data: makeXAdES(t, docs, xadesOpts{id: "B"})}}, nil)
+		if err != nil {
+			t.Fatalf("BuildContainer: %v", err)
+		}
+		signed, err := CoSign(unsigned, makeFileless(t, full))
+		if err != nil {
+			t.Fatalf("CoSign onto unsigned: %v", err)
+		}
+		readZipEntry(t, signed, "META-INF/signatures0.xml")
+
+		// And a second, ordinary parallel co-sign still works on top.
+		full2, err := BuildContainer(docs, []File{{Name: "s.xml", Data: makeXAdES(t, docs, xadesOpts{id: "C"})}}, nil)
+		if err != nil {
+			t.Fatalf("BuildContainer: %v", err)
+		}
+		cosigned, err := CoSign(signed, makeFileless(t, full2))
+		if err != nil {
+			t.Fatalf("CoSign second signature: %v", err)
+		}
+		readZipEntry(t, cosigned, "META-INF/signatures0.xml")
+		readZipEntry(t, cosigned, "META-INF/signatures1.xml")
+		_, sigs, _, err := Inspect(cosigned)
+		if err != nil {
+			t.Fatalf("Inspect: %v", err)
+		}
+		if len(sigs) != 2 {
+			t.Fatalf("signatures = %d, want 2", len(sigs))
+		}
+	})
+}
+
 func TestAddSignature(t *testing.T) {
 	docs := sampleDocs()
 	first := File{Name: "first.xml", Data: makeXAdES(t, docs, xadesOpts{id: "FIRST"})}

@@ -20,7 +20,8 @@ the dependency surface to the standard library.
 | Function | Purpose |
 |---|---|
 | `BuildContainer(docs, signatures, opts) ([]byte, error)` | Assemble a new `.asice` from 1..N documents + 1..N XAdES signatures. |
-| `AddSignature(container, newSignature) ([]byte, error)` | Add a parallel (co-) signature to an existing `.asice`; derives the next `signatures*.xml` index itself. |
+| `BuildUnsigned(docs) ([]byte, error)` | Assemble a signature-less `.asice` holding 1..N documents (mimetype + data objects + manifest, no `signatures*.xml`). Fixes the data-object order up front; the first signature is then added like any parallel one (`AddSignature` / `CoSign`). Validates names (safe, non-reserved, unique — `ErrBadDocumentName`). |
+| `AddSignature(container, newSignature) ([]byte, error)` | Add a parallel (co-) signature to an existing `.asice` — including one with **zero** signatures so far; derives the next `signatures*.xml` index itself. |
 | `CoSign(original, fileless) ([]byte, error)` | Add the signature(s) from a fileless (hash-only) container as parallel co-signature(s) on a complete container; one-call `ExtractSignatures` + `AddSignature`. |
 | `AddDocuments(container, docs) ([]byte, error)` | Complete a fileless (hash-signed) container by inserting the data objects; verifies filename and digest before inserting. |
 | `ExtractSignatures(container) ([]File, error)` | Return the `signatures*.xml` entries from a container (including a fileless one); output is suitable for `AddSignature`. |
@@ -105,7 +106,8 @@ Mismatches return sentinel errors (use `errors.Is`):
 `ErrFileCountMismatch`, `ErrFilenameMismatch`, `ErrDigestMismatch`,
 `ErrSignatureTargetMismatch` (parallel signing), `ErrMalformedXAdES`,
 `ErrUnsupportedDigest`, `ErrInvalidContainer`, `ErrNoDocuments`,
-`ErrNoSignatures`, `ErrTooLarge` / `ErrTooManyEntries` (decompression limits).
+`ErrNoSignatures`, `ErrBadDocumentName` (unsigned build name validation),
+`ErrTooLarge` / `ErrTooManyEntries` (decompression limits).
 
 ## Scope / non-goals
 
