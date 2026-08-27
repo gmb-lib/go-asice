@@ -6,7 +6,7 @@ A small, framework-agnostic Go library for assembling and inspecting **ASiC-E**
 (ASiC) and ETSI EN 319 132-1 (XAdES).
 
 ```
-go get github.com/gmb-lib/asice
+go get github.com/gmb-lib/go-asice
 ```
 
 It is the reusable packaging core. By design it does **no network I/O, no authentication, no
@@ -115,3 +115,15 @@ Mismatches return sentinel errors (use `errors.Is`):
   (wallet / CSC / own tools).
 - No in-process signature cryptography — validation SHALL BE delegated to external validation service, `EU DSS` for example.
 - Countersignatures are out of scope (parallel/co-signatures only).
+
+## Contributing
+
+Bug reports and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) names the gate a
+change has to pass, what a change to this library needs, and the sign-off every commit carries.
+
+Suspected vulnerabilities go through the private route in [SECURITY.md](SECURITY.md) — never a
+public issue.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
