@@ -9,6 +9,9 @@ A small, framework-agnostic Go library for assembling and inspecting **ASiC-E**
 go get github.com/gmb-lib/go-asice
 ```
 
+See [`CHANGELOG.md`](./CHANGELOG.md) for what each release changed, and what it means for code that
+already uses this library, before you bump.
+
 It is the reusable packaging core. By design it does **no network I/O, no authentication, no
 HTTP**, and performs **no cryptographic signature verification** — that SHALL BE
 delegated to an external validator (example: `EU DSS`). The only checks here are
