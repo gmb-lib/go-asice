@@ -4,6 +4,33 @@ Notable changes to this library, newest first. Versions are git tags; this file 
 for whoever bumps the dependency — what changed, and what it means for code that already
 uses it.
 
+## v1.6.3
+
+No library code changed since v1.6.2, so nothing this library does behaves differently. There is
+one thing to act on before you bump: **it now needs Go 1.27.2**.
+
+### Changed
+
+- **The module declares `go 1.27.2`** (was `1.27.0`), so your own module has to be on Go 1.27.2
+  before it can build against this one. No vulnerability in Go 1.27.0 reached this library's code
+  (`govulncheck` found none before the move either). The minimum moves with the other gmb-lib
+  libraries, which do need the 1.27.2 security fixes, so a consumer has one Go version to meet.
+  Raise your own module's `go` directive to `1.27.2`; from there the go command downloads and uses
+  that toolchain by itself. CI that reads `go-version-file: go.mod` follows with no workflow edit.
+
+  This library still has **no module dependencies at all**.
+
+### Notes
+
+- CI's pinned GitHub Actions moved to their current commits. No code changed with it.
+
+- **CI's linter moved to golangci-lint v2.14.0** (was v2.13.1). The earlier release cannot read Go 1.27.2's
+  compiled standard library and stops before linting anything. No code changed with it.
+
+- The gate is green on Go 1.27.2: `go mod verify`, `go mod tidy -diff`, build, vet, `gofmt`,
+  golangci-lint v2.14.0, `go test -race` with **0 races**, and both fuzz targets for 30 seconds
+  each with no failing input; `govulncheck` finds nothing.
+
 ## v1.6.2
 
 No library code changed since v1.6.1, so nothing this library does behaves differently. There is
