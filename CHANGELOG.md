@@ -4,6 +4,11 @@ Notable changes to this library, newest first. Versions are git tags; this file 
 for whoever bumps the dependency — what changed, and what it means for code that already
 uses it.
 
+## v1.6.4
+
+No library code changed. The module now requires Go 1.27.3 (was 1.27.2); CI follows the version
+in `go.mod`.
+
 ## v1.6.3
 
 No library code changed since v1.6.2, so nothing this library does behaves differently. There is
