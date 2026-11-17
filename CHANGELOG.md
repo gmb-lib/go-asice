@@ -4,6 +4,10 @@ Notable changes to this library, newest first. Versions are git tags; this file 
 for whoever bumps the dependency — what changed, and what it means for code that already
 uses it.
 
+## v1.6.5
+
+**Requires Go 1.27.4** (was 1.27.3), so a consumer on an older toolchain will not build this version. No source change and no dependency change: every exported symbol, signature and behaviour is as in v1.6.4.
+
 ## v1.6.4
 
 No library code changed. The module now requires Go 1.27.3 (was 1.27.2); CI follows the version
